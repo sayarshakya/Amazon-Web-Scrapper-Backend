@@ -18,26 +18,41 @@ namespace WebScrapper.Services
 
         public async Task<Product> GetProductFromUrl(string url)
         {
-            var asin = AmazonHelper.ExtractAsin(url);
+            var handler = new HttpClientHandler
+            {
+                AutomaticDecompression = System.Net.DecompressionMethods.GZip
+                           | System.Net.DecompressionMethods.Deflate
+            };
 
-            if (string.IsNullOrEmpty(asin))
-                throw new Exception("Invalid Amazon URL");
+            var httpClient = new HttpClient(handler);
 
-            var apiKey = _config["ScraperApi:Key"];
+            httpClient.DefaultRequestHeaders.Add("User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
 
-            var apiUrl = $"https://api.rainforestapi.com/request?api_key={apiKey}&type=product&amazon_domain=amazon.com&asin={asin}";
+            var html = await httpClient.GetStringAsync(url);
 
-            var response = await _httpClient.GetStringAsync(apiUrl);
+            var doc = new HtmlAgilityPack.HtmlDocument();
+            doc.LoadHtml(html);
 
-            var json = JObject.Parse(response);
+            var title = doc.DocumentNode
+                .SelectSingleNode("//span[@id='productTitle']")
+                ?.InnerText.Trim();
+
+            var price = doc.DocumentNode
+                .SelectSingleNode("//span[@class='a-price-whole']")
+                ?.InnerText;
+
+            var image = doc.DocumentNode
+                .SelectSingleNode("//img[@id='landingImage']")
+                ?.GetAttributeValue("src", "");
 
             return new Product
             {
-                Title = json["product"]?["title"]?.ToString(),
-                Price = json["product"]?["buybox_winner"]?["price"]?["value"]?.ToString(),
-                Image = json["product"]?["main_image"]?["link"]?.ToString(),
-                Rating = json["product"]?["rating"]?.ToString()
+                Title = title,
+                Price = price,
+                Image = image
             };
+
         }
     }
 }
